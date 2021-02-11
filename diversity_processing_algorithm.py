@@ -40,6 +40,8 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterFileDestination,
                        QgsProcessingOutputString)
 
+from .diversity_functions import *
+
 
 class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
     """
@@ -99,7 +101,7 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
             )
         )
 
-        #add point layer Input/Output
+        # add point layer Input/Output
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.POINTLAYER,
@@ -114,15 +116,15 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
                 self.tr('Species fields'),
                 None,
                 self.POINTLAYER,
-                QgsProcessingParameterField.String                
+                QgsProcessingParameterField.String
             )
         )
 
         self.addParameter(
-           QgsProcessingParameterFileDestination(
-               self.SUMMARY_HTML,
-               self.tr('Output HTML File'),
-               'HTML Files *.html',
+            QgsProcessingParameterFileDestination(
+                self.SUMMARY_HTML,
+                self.tr('Output HTML File'),
+                'HTML Files *.html',
             )
         )
 
@@ -141,25 +143,55 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
-        source = self.parameterAsSource(parameters, self.INPUT, context)
-        (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
-                                               context, source.fields(), source.wkbType(), source.sourceCrs())
+        lyrPoly = self.parameterAsSource(parameters, self.POLYLAYER, context)
+        lyrPoint = self.parameterAsSource(parameters, self.POINTLAYER, context)
 
-        # Compute the number of steps to display within the progress bar and
-        # get features from source
-        total = 100.0 / source.featureCount() if source.featureCount() else 0
-        features = source.getFeatures()
+        fldCategory = self.parameterAsString(
+            parameters, self.CATEGORYFIELD, context)
+        fldCpecies = self.parameterAsString(
+            parameters, self.SPECIESFIELD, context)
 
-        for current, feature in enumerate(features):
-            # Stop the algorithm if cancel button has been clicked
+        outFile = self.parameterAsFileOutput(parameters, self.SUMMARY_HTML, context)
+
+        dctMain = {}
+        # loop thru all polygon layer selected in combo box
+        for poly in lyrPoly.getFeatures():
             if feedback.isCanceled():
+                feedback.pushInfo("Canceled by user")
                 break
 
-            # Add a feature in the sink
-            sink.addFeature(feature, QgsFeatureSink.FastInsert)
+            sCategory = poly.attribute(fldCategory)
+            feedback.pushInfo("Category: {}".format(sCategory))
+            # QgsMessageLog.logMessage("Category: {}".format(
+            # sCategory), "Diversity Calculator", level=Qgis.Info)
+            dctSummary = dc_summarizePoly(poly, lyrPoint, fldCpecies)
+            feedback.pushDebugInfo("Summary: {}".format(dctSummary))
+            # QgsMessageLog.logMessage("Summary: {}".format(
+            # dctSummary), "Diversity Calculator", level=Qgis.Info)
 
-            # Update the progress bar
-            feedback.setProgress(int(current * total))
+            dctMain = dc_MergeDictionaries(dctMain, sCategory, dctSummary)
+
+        feedback.pushInfo(str(dctMain))
+
+        return {self.SUMMARY_DICTIONARY: str(dctMain), self.SUMMARY_HTML: outFile }
+        # (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
+        #                                        context, source.fields(), source.wkbType(), source.sourceCrs())
+
+        # # Compute the number of steps to display within the progress bar and
+        # # get features from source
+        # total = 100.0 / source.featureCount() if source.featureCount() else 0
+        # features = source.getFeatures()
+
+        # for current, feature in enumerate(features):
+        #     # Stop the algorithm if cancel button has been clicked
+        #     if feedback.isCanceled():
+        #         break
+
+        #     # Add a feature in the sink
+        #     sink.addFeature(feature, QgsFeatureSink.FastInsert)
+
+        #     # Update the progress bar
+        #     feedback.setProgress(int(current * total))
 
         # Return the results of the algorithm. In this case our only result is
         # the feature sink which contains the processed features, but some
@@ -167,7 +199,7 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
         # statistics, etc. These should all be included in the returned
         # dictionary, with keys matching the feature corresponding parameter
         # or output names.
-        return {self.OUTPUT: dest_id}
+        # return {self.OUTPUT: dest_id}
 
     def name(self):
         """
