@@ -30,15 +30,18 @@ __copyright__ = '(C) 2021 by GeoDigit d.o.o.'
 
 __revision__ = '$Format:%H$'
 
-from qgis.PyQt.QtCore import QCoreApplication
-from qgis.PyQt.QtGui import QIcon
-from qgis.core import (QgsProcessing,
-                       QgsFeatureSink,
-                       QgsProcessingAlgorithm,
+import time
+import webbrowser
+
+from qgis.core import (QgsFeatureSink, QgsProcessing, QgsProcessingAlgorithm,
+                       QgsProcessingOutputString,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterField,
-                       QgsProcessingParameterFileDestination,
-                       QgsProcessingOutputString)
+                       QgsProcessingParameterFileDestination, 
+                       QgsProcessingParameterBoolean)
+
+from qgis.PyQt.QtCore import QCoreApplication
+from qgis.PyQt.QtGui import QIcon
 
 from .diversity_functions import *
 
@@ -71,6 +74,7 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
     SPECIESFIELD = "SPECIESFIELD"
     SUMMARY_DICTIONARY = "SUMMARY DICTIONARY"
     SUMMARY_HTML = "SUMMARY_HTML"
+    DETAILED = "DETAILED"
 
     def initAlgorithm(self, config):
         """
@@ -84,7 +88,7 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterFeatureSource(
                 self.POLYLAYER,
                 self.tr('Polygon layer'),
-                [QgsProcessing.TypeVectorAnyGeometry]
+                [QgsProcessing.TypeVectorPolygon]
             )
         )
 
@@ -121,6 +125,14 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
         )
 
         self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.DETAILED,
+                self.tr('Include raw data'),
+                True,
+            )
+        )
+
+        self.addParameter(
             QgsProcessingParameterFileDestination(
                 self.SUMMARY_HTML,
                 self.tr('Output HTML File'),
@@ -152,6 +164,10 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
             parameters, self.SPECIESFIELD, context)
 
         outFile = self.parameterAsFileOutput(parameters, self.SUMMARY_HTML, context)
+        bDetail = self.parameterAsBoolean(parameters, self.DETAILED, context)
+
+        total = lyrPoly.featureCount()
+        current = 0
 
         dctMain = {}
         # loop thru all polygon layer selected in combo box
@@ -171,7 +187,19 @@ class DiversityProcessingAlgorithm(QgsProcessingAlgorithm):
 
             dctMain = dc_MergeDictionaries(dctMain, sCategory, dctSummary)
 
+            current += 1
+            feedback.setProgress(current/total*100)
+            feedback.setProgressText("Currently on polygon {} out of {}".format(current, total))
+            time.sleep(0.5)
+
         feedback.pushInfo(str(dctMain))
+
+        if not feedback.isCanceled():
+            f = open(outFile, "w")
+            f.write(dc_resultHTML(dctMain, lyrPoly.sourceName(), fldCategory, bDetail))
+            f.close()
+
+            webbrowser.open("file://{}".format(outFile))
 
         return {self.SUMMARY_DICTIONARY: str(dctMain), self.SUMMARY_HTML: outFile }
         # (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,

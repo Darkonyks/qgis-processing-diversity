@@ -2,6 +2,7 @@
 import math
 from qgis.core import QgsFeatureRequest
 
+
 def dc_summarizePoly(poly, lyrPoint, fldCpecies):
 
     dctPoly = {}
@@ -80,3 +81,71 @@ def dc_resultString(dict):
         result += "{}: {}   {:2.3f}   {:2.3f}   {:2.3f}\n".format(category, dc_richness(
             summary), dc_shannons(summary), dc_simpsons(summary), dc_evennes(summary))
     return result
+
+
+def dc_resultHTML(dict, sLayer, sCategory, bDetail=True):
+    html = """
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <title>Diversity Calculator</title>
+            <style>
+                table, th, td {
+                    border: 1px solid black;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Diversity Calculator</h1>
+            <h2>""" + sLayer + ": " + sCategory + """</h2>
+            <table>
+                <tr>
+                    <th> Name </th>
+                    <th> Count </th>
+                    <th> Richness </th>
+                    <th> Evenness </th>
+                    <th> Shannons </th>
+                    <th> Simpsons D </th>
+                </tr>
+        """
+
+    for category in sorted(dict.keys()):
+        summary = dict[category]
+        html += "           <tr>\n"
+        html += "               <td>" + category + "</td>"
+        html += "<td>" + str(sum(summary.values())) + "</td>"
+        html += "<td>" + str(dc_richness(summary)) + "</td>"
+        html += "<td>" + "{:3.3f}".format(dc_evennes(summary)) + "</td>"
+        html += "<td>" + "{:3.3f}".format(dc_shannons(summary)) + "</td>"
+        html += "<td>" + "{:3.3f}".format(dc_simpsons(summary)) + "</td>\n"
+        html += "           </tr>\n"
+    html += """
+            </table>
+
+"""
+
+    if bDetail:
+        html += """
+        <h2>Raw Data</h2>
+        <table>
+            <tr>
+                <th>Name</th>
+                <th>Species</th>
+                <th>Observations</th>
+            </tr>
+    """
+        for category in sorted(dict.keys()):
+            for species, obs in dict[category].items():
+                html += "              <tr>\n"
+                html += "                  <td>" + category + "</td>"
+                html += "<td>" + species + "</td>\n"
+                html += "<td>" + str(obs) + "</td>\n"
+                html += "               </tr>\n"
+        html += """
+        </table>"""
+    html += """
+        </body>
+    </html>
+    """
+
+    return html
